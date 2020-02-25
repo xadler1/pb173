@@ -28,13 +28,13 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	typedef int (*aes_setkey_enc_t)(mbedtls_aes_context *, const unsigned char *, unsigned int);
 	typedef int (*aes_crypt_cbc_t)(mbedtls_aes_context *, int, size_t, unsigned char[], const unsigned char *, unsigned char *);
 
-	aes_setkey_enc_t aes_setkey_enc = (aes_setkey_enc_t) dlsym(lib, "mbedtls_aes_setkey_enc");
+	aes_setkey_enc_t aes_setkey_enc = reinterpret_cast<aes_setkey_enc_t>(dlsym(lib, "mbedtls_aes_setkey_enc"));
 	if (!aes_setkey_enc) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
 	}
 
-	aes_crypt_cbc_t aes_crypt_cbc = (aes_crypt_cbc_t) dlsym(lib, "mbedtls_aes_crypt_cbc");
+	aes_crypt_cbc_t aes_crypt_cbc = reinterpret_cast<aes_crypt_cbc_t>(dlsym(lib, "mbedtls_aes_crypt_cbc"));
 	if (!aes_crypt_cbc) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
@@ -64,17 +64,16 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	}
 
 	unsigned char* in = &input[0];
-	unsigned char output[input_len];
-
+	auto output = std::make_unique<unsigned char[]>(input_len);
 
 	aes_setkey_enc(&aes, key, 128);
-	aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, input_len, iv, in, output);
+	aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, input_len, iv, in, output.get());
 
-	fout.write((char *)&output[0], input_len);
+	fout.write(reinterpret_cast<char *> (&output[0]), input_len);
 
 	/* hashing */
 	typedef int (*sha512_t)(const unsigned char *, size_t, unsigned char[], int);
-	sha512_t sha512 = (sha512_t) dlsym(lib, "mbedtls_sha512_ret");
+	sha512_t sha512 = reinterpret_cast<sha512_t>(dlsym(lib, "mbedtls_sha512_ret"));
 	if (!sha512) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
@@ -83,7 +82,7 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	std::fstream fouthash(outputPath + ".digest", std::ios::out);
 
 	unsigned char hash[64];
-	const unsigned char *hash_in = (const unsigned char *) output;
+	const unsigned char *hash_in = const_cast<const unsigned char *>(output.get());
 
 	sha512(hash_in, input_len, hash, 0);
 
@@ -101,7 +100,7 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 {
 	/* hashing */
 	typedef int (*sha512_t)(const unsigned char *, size_t, unsigned char[], int);
-	sha512_t sha512 = (sha512_t) dlsym(lib, "mbedtls_sha512_ret");
+	sha512_t sha512 = reinterpret_cast<sha512_t>(dlsym(lib, "mbedtls_sha512_ret"));
 	if (!sha512) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
@@ -126,7 +125,7 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 
 	/* hash comparison */
 	unsigned char hash[64];
-	const unsigned char *hash_in = (const unsigned char *) in;
+	const unsigned char *hash_in = const_cast<const unsigned char *>(in);
 
 	sha512(hash_in, input_len, hash, 0);
 
@@ -176,13 +175,13 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	typedef int (*aes_setkey_dec_t)(mbedtls_aes_context *, const unsigned char *, unsigned int);
 	typedef int (*aes_crypt_cbc_t)(mbedtls_aes_context *, int, size_t, unsigned char[], const unsigned char *, unsigned char *);
 
-	aes_setkey_dec_t aes_setkey_dec = (aes_setkey_dec_t) dlsym(lib, "mbedtls_aes_setkey_dec");
+	aes_setkey_dec_t aes_setkey_dec = reinterpret_cast<aes_setkey_dec_t>(dlsym(lib, "mbedtls_aes_setkey_dec"));
 	if (!aes_setkey_dec) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
 	}
 
-	aes_crypt_cbc_t aes_crypt_cbc = (aes_crypt_cbc_t) dlsym(lib, "mbedtls_aes_crypt_cbc");
+	aes_crypt_cbc_t aes_crypt_cbc = reinterpret_cast<aes_crypt_cbc_t>(dlsym(lib, "mbedtls_aes_crypt_cbc"));
 	if (!aes_crypt_cbc) {
 		std::cerr << dlerror() << std::endl;
 		return 2;
@@ -190,12 +189,12 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 
 
 
-	unsigned char output[input_len];
+	auto output = std::make_unique<unsigned char[]>(input_len);
 
 	//std::cout << "input_len = " << input_len << std::endl;
 
 	aes_setkey_dec(&aes, key, 128);
-	aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, input_len, iv, in, output);
+	aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, input_len, iv, in, output.get());
 
 	// remove padding
 	size_t pad = output[input_len - 1];
@@ -213,10 +212,14 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 void printHelp()
 {
 	std::cout << "usage: assignment -en <key> <vector> <input file> <output file>" << std::endl;
-	std::cout << "encrypts <input file> into <output file> and writes sha512 checksum into <output file>.digest" << std::endl;
+	std::cout << "\t\tencrypts <input file> into <output file> and writes sha512 checksum into <output file>.digest" << std::endl;
+	std::cout << "\t\t<key> must be 16 characters long" << std::endl;
+	std::cout << "\t\t<vector> must be 16 characters long" << std::endl;
 	std::cout << std::endl;
 	std::cout << "       assignment -de <key> <vector> <input file> <output file>" << std::endl;
-	std::cout << "decrypts <input file> into <output file> and compare checksum with <input file>.digest" << std::endl;
+	std::cout << "\t\tdecrypts <input file> into <output file> and compare checksum with <input file>.digest" << std::endl;
+	std::cout << "\t\t<key> must be 16 characters long" << std::endl;
+	std::cout << "\t\t<vector> must be 16 characters long" << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -227,7 +230,7 @@ int main(int argc, char** argv)
 	}
 
 	// test wether library is present
-	void *lib = dlopen("./libmbedcrypto.so", RTLD_LAZY);
+	void *lib = dlopen("../libs/libmbedcrypto.so", RTLD_LAZY);
 
 	if (!lib) {
 		std::cerr << dlerror();

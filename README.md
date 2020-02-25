@@ -1,4 +1,2 @@
-This is a useless readme.  
-It has been modified. Wow.  
-And now even from the web browser.  
-A signed commit test.
+Verifikace knihovny  
+Zkusil jsem použít gpg --verify na staženou knihovnu *.tgz. Bohužel se mi nepodařilo najít veřejný klíč k ověření, tak jsem se po nějaké době hledání spokojil s porovnáním přiloženého hashe. 
