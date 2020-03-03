@@ -40,6 +40,62 @@ TEST_CASE("only test case")
 		REQUIRE(!checkWrite("/etc/fstab"));
 	}
 
+	SECTION("wrong decryption key")
+	{
+		std::string key = "abcdefghijklmnop";
+		std::string wrong = "ABCDEFGHIJKLMNOP";
+		std::string iv = "0000000000000000";
+
+		std::stringstream in;
+		std::stringstream enc;
+		std::stringstream out1;
+		std::stringstream out2;
+		in << "nejaky text k zasifrovani";
+
+		encrypt(&key[0], &iv[0], in, enc, lib);
+		enc.seekg(0, std::ios::beg);
+
+		decrypt(&key[0], &iv[0], enc, out1, lib);
+		enc.clear();
+		enc.seekg(0, std::ios::beg);
+
+		decrypt(&wrong[0], &iv[0], enc, out2, lib);
+
+		REQUIRE(out1.str() != out2.str());
+	}
+
+	SECTION("corrupted blob")
+	{
+		std::string key = "abcdefghijklmnop";
+		std::string iv = "0000000000000000";
+
+		std::stringstream in;
+		std::stringstream enc;
+		//std::stringstream enc2;
+
+		std::stringstream out1;
+		std::stringstream out2;
+
+		in << "nejaky jiny text k zasifrovani";
+
+		encrypt(&key[0], &iv[0], in, enc, lib);
+		enc.seekg(0, std::ios::beg);
+
+		std::string s = enc.str();
+		// corruption
+		s.pop_back();
+		std::stringstream enc2(s);
+
+
+		decrypt(&key[0], &iv[0], enc, out1, lib);
+		enc.clear();
+		enc.seekg(0, std::ios::beg);
+
+		decrypt(&key[0], &iv[0], enc2, out2, lib);
+
+		REQUIRE(out1.str() != out2.str());
+	}
+
 	dlclose(lib);
 
 

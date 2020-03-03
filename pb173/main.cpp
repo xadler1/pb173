@@ -21,6 +21,7 @@ void printHelp()
 	std::cout << "1\tsyntax error" << std::endl;
 	std::cout << "2\tdynamic library error" << std::endl;
 	std::cout << "3\tinput/output file error" << std::endl;
+	std::cout << "4\tencrypted message has different hash" << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -45,9 +46,9 @@ int main(int argc, char** argv)
 	int exit = 0;
 
 	if (strcmp(argv[1], "-en") == 0) {
-		exit = encrypt(argv[2], argv[3], argv[4], argv[5], lib);
+		exit = encrypt_hash(argv[2], argv[3], argv[4], argv[5], lib);
 	} else if (strcmp(argv[1], "-de") == 0) {
-		exit = decrypt(argv[2], argv[3], argv[4], argv[5], lib);
+		exit = decrypt_compare(argv[2], argv[3], argv[4], argv[5], lib);
 	} else {
 		printHelp();
 		return 1;

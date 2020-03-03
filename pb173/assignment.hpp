@@ -2,6 +2,7 @@
 #define ASSIGNMENT_HPP
 
 #include <iostream>
+#include <istream>
 #include <fstream>
 #include <vector>
 #include <dlfcn.h>
@@ -103,15 +104,15 @@ bool checkKeyVec(char *arg)
 }
 
 /**
- * encrypts file using aes-128 in cbc mode using PKCS#7 padding and writes hash of encrypted file
+ * encrypts file using aes-128 in cbc mode using PKCS#7 padding
  * @param keyarg	key used for encryption, 16 characters long
  * @param vecarg	initialization vector, 16 characters long
- * @param inputPath	path of input file
- * @param outputPath	path of output file
+ * @param inputPath	input stream
+ * @param outputPath	output stream
  * @param lib		dynamic library to load aes encryption function
  * @return 0 success, 2 library does not have required symbol
  */
-int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std::string &outputPath, void *lib)
+int encrypt(char *keyarg, char *vecarg, std::istream &inputStream, std::ostream &outputStream, void *lib)
 {
 	mbedtls_aes_context aes;
 	unsigned char key[16];
@@ -142,12 +143,9 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	}
 
 	// reading input
-	std::fstream fin(inputPath, std::ios::in);
-	std::fstream fout(outputPath, std::ios::out);
-
-	while (!fin.eof()) {
+	while (!inputStream.eof()) {
 		++input_len;
-		input.push_back(fin.get());
+		input.push_back(inputStream.get());
 	}
 
 	// remove eof character
@@ -168,19 +166,14 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	aes_setkey_enc(&aes, key, 128);
 	aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, input_len, iv, &input[0], &output[0]);
 
-	fout.write(reinterpret_cast<char *> (&output[0]), input_len);
-
-	// hashing
-	std::fstream fouthash(outputPath + ".digest", std::ios::out);
-
-	hash(&output[0], input_len, fouthash, lib);
-
+	outputStream.write(reinterpret_cast<char *> (&output[0]), input_len);
 
 	return 0;
 }
 
 /**
- * decrypts file using aes-128 in cbc mode using PKCS#7 padding and compares hash with hash from inputPath.digest
+ * wrapper funcion
+ * encrypts file using aes-128 in cbc mode using PKCS#7 padding and writes hash of encrypted file
  * @param keyarg	key used for encryption, 16 characters long
  * @param vecarg	initialization vector, 16 characters long
  * @param inputPath	path of input file
@@ -188,45 +181,66 @@ int encrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
  * @param lib		dynamic library to load aes encryption function
  * @return 0 success, 2 library does not have required symbol
  */
-int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std::string &outputPath, void *lib)
+int encrypt_hash(char *keyarg, char *vecarg, const std::string &inputPath, const std::string &outputPath, void *lib)
+{
+	int exit = 0;
+	std::fstream input(inputPath, std::ios::in);
+	std::fstream output(outputPath, std::ios::out);
+
+	exit = encrypt(keyarg, vecarg, input, output, lib);
+
+	output.close();
+
+	std::fstream hashin(outputPath, std::ios::in);
+	std::vector<unsigned char> in;
+
+	while (!hashin.eof()) {
+		in.push_back(hashin.get());
+	}
+
+	std::cout << in.size() << std::endl;
+
+
+	for (auto &el : in) {
+		std::cout << el;
+	}
+
+	std::cout << std::endl;
+
+
+	// hashing
+	std::fstream fouthash(outputPath + ".digest", std::ios::out);
+
+	hash(&in[0], in.size() - 1, fouthash, lib);
+
+
+	return exit;
+}
+
+/**
+ * decrypts file using aes-128 in cbc mode using PKCS#7 padding
+ * @param keyarg	key used for encryption, 16 characters long
+ * @param vecarg	initialization vector, 16 characters long
+ * @param inputPath	input stream
+ * @param outputPath	output stream
+ * @param lib		dynamic library to load aes encryption function
+ * @return 0 success, 2 library does not have required symbol
+ */
+int decrypt(char *keyarg, char *vecarg, std::istream &inputStream, std::ostream &outputStream, void *lib)
 {
 	std::vector<unsigned char> input;
 	size_t input_len = 0;
 
-	std::fstream fin(inputPath, std::ios::in);
-	std::fstream fout(outputPath, std::ios::out);
-
-	while (!fin.eof()) {
+	while (!inputStream.eof()) {
 		++input_len;
-		input.push_back(fin.get());
+		input.push_back(inputStream.get());
 	}
 
 	// remove eof character
 	--input_len;
 	input.pop_back();
 
-	/* hash comparison */
-	std::stringstream computed;
-	std::stringstream supplied;
-
-	hash(&input[0], input_len, computed, lib);
-
-	std::fstream finhash(inputPath + ".digest", std::ios::in);
-
-	while (!finhash.eof()) {
-		supplied << static_cast<char>(finhash.get());
-	}
-
-	// remove eof character
-	std::string sup = supplied.str();
-	sup.pop_back();
-
-
-	if (computed.str() != sup) {
-		std::cerr << "digests don't match" << std::endl;
-	}
-
-	/* decrypting */
+	// decrypting
 	mbedtls_aes_context aes;
 	unsigned char key[16];
 	unsigned char iv[16];
@@ -251,11 +265,7 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 		return 2;
 	}
 
-
-
 	std::vector<unsigned char> output(input_len);
-
-	//std::cout << "input_len = " << input_len << std::endl;
 
 	aes_setkey_dec(&aes, key, 128);
 	aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, input_len, iv, &input[0], &output[0]);
@@ -264,10 +274,69 @@ int decrypt(char *keyarg, char *vecarg, const std::string &inputPath, const std:
 	size_t pad = output[input_len - 1];
 
 	for (size_t i = 0; i < input_len - pad; ++i) {
-		fout << output[i];
+		outputStream << output[i];
 	}
 
 	return 0;
+}
+
+/**
+ * wrapper function
+ * decrypts file using aes-128 in cbc mode using PKCS#7 padding and compares hash with hash from inputPath.digest
+ * @param keyarg	key used for encryption, 16 characters long
+ * @param vecarg	initialization vector, 16 characters long
+ * @param inputPath	path of input file
+ * @param outputPath	path of output file
+ * @param lib		dynamic library to load aes encryption function
+ * @return 0 success, 2 library does not have required symbol
+ */
+int decrypt_compare(char *keyarg, char *vecarg, const std::string &inputPath, const std::string &outputPath, void *lib)
+{
+	int exit = 0;
+	std::vector<unsigned char> input;
+	size_t input_len = 0;
+
+	std::fstream fin(inputPath, std::ios::in);
+	std::fstream fout(outputPath, std::ios::out);
+
+	exit = decrypt(keyarg, vecarg, fin, fout, lib);
+
+	// reset to beginning
+	fin.clear();
+	fin.seekg(0, std::ios::beg);
+
+	while (!fin.eof()) {
+		++input_len;
+		input.push_back(fin.get());
+	}
+
+	// remove eof character
+	--input_len;
+	input.pop_back();
+
+	// hash comparison
+	std::stringstream computed;
+	std::stringstream supplied;
+
+	exit += hash(&input[0], input_len, computed, lib);
+
+	std::fstream finhash(inputPath + ".digest", std::ios::in);
+
+	while (!finhash.eof()) {
+		supplied << static_cast<char>(finhash.get());
+	}
+
+	// remove eof character
+	std::string sup = supplied.str();
+	sup.pop_back();
+
+
+	if (computed.str() != sup) {
+		std::cerr << "digests don't match" << std::endl;
+		return 4;
+	}
+
+	return exit;
 }
 
 #endif // ASSIGNMENT_HPP
