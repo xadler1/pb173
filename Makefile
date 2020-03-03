@@ -1,4 +1,4 @@
-CXXFLAGS=-Werror -Wall -ldl
+CXXFLAGS=-ldl
 SOURCES_MAIN=pb173/main.cpp
 OBJECTS_MAIN=$(SOURCES_MAIN:.cpp=.o)
 SOURCES_TEST=pb173/assignment.test.cpp pb173/test-main.cpp
