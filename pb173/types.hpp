@@ -1,17 +1,10 @@
+#ifndef TYPES_HPP
+#define TYPES_HPP
+
 #include <cstdint>
 
 #define MBEDTLS_AES_ENCRYPT     1 /**< AES encryption. */
 #define MBEDTLS_AES_DECRYPT     0 /**< AES decryption. */
-
-typedef struct mbedtls_sha512_context
-{
-    uint64_t total[2];          /*!< The number of Bytes processed. */
-    uint64_t state[8];          /*!< The intermediate digest state. */
-    unsigned char buffer[128];  /*!< The data block being processed. */
-    int is384;                  /*!< Determines which function to use:
-                                     0: Use SHA-512, or 1: Use SHA-384. */
-}
-mbedtls_sha512_context;
 
 typedef struct mbedtls_aes_context
 {
@@ -27,3 +20,5 @@ typedef struct mbedtls_aes_context
                                          </li></ul> */
 }
 mbedtls_aes_context;
+
+#endif // TYPES_HPP
